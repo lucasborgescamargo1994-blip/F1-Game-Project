@@ -83,7 +83,7 @@
                 const tan = trackCurve.getTangentAt(startP);
                 
                 // AJUSTE DE ALTURA (Y = 0.5 para não enterrar)
-                car.position.set(pos.x, 0.5, pos.z); 
+                car.position.set(pos.x, 0.6, pos.z); 
                 car.lookAt(pos.x + tan.x, 0.5, pos.z + tan.z);
                 
                 car.userData = { 
@@ -179,7 +179,7 @@
 
             // MOVIMENTO (Sempre mantém Y=0.5)
             player.translateZ(player.userData.speedKmh / 3.6 * dt);
-            player.position.y = 0.5; 
+            player.position.y = 0.6; 
 
             // IA
             cars.forEach(ai => {
