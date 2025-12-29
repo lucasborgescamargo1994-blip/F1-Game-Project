@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>F1 Grand Prix - Fixed Steering</title>
+    <title>F1 Grand Prix - Fixed Height</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
         #ui-layer { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; justify-content: center; align-items: center; }
@@ -23,7 +23,7 @@
 </head>
 <body>
 
-    <div id="loading-screen"><h2>CARREGANDO...</h2></div>
+    <div id="loading-screen"><h2>CARREGANDO MOTORES...</h2></div>
     <div id="results-screen">
         <h1>FIM DE PROVA</h1>
         <div id="podium" style="background: #222; padding: 20px; border-radius: 10px; width: 300px;"></div>
@@ -59,7 +59,7 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        let scene, camera, renderer, player, cachedModel, trackCurve;
+        let scene, camera, renderer, player, cachedModel, trackCurve, trackMesh;
         let cars = [], raceStatus = 'preparing', startTime = 0, maxLaps = 3, finishOrder = [];
         const keys = {};
         const GEAR_LIMITS = [0, 100, 140, 180, 220, 250, 280, 310, 345];
@@ -74,21 +74,22 @@
             await loadModel();
             buildTrack(trackType);
 
-            // Criar carros
             for(let i=0; i<20; i++) {
                 const isUser = (i === 0);
                 const car = createCar(isUser ? 0xe10600 : 0x00d2be);
                 
-                // Posição inicial
                 const startP = 0.99 - (i * 0.006);
                 const pos = trackCurve.getPointAt(startP);
                 const tan = trackCurve.getTangentAt(startP);
-                car.position.copy(pos);
-                car.lookAt(pos.clone().add(tan));
+                
+                // AJUSTE DE ALTURA (Y = 0.5 para não enterrar)
+                car.position.set(pos.x, 0.5, pos.z); 
+                car.lookAt(pos.x + tan.x, 0.5, pos.z + tan.z);
                 
                 car.userData = { 
                     speedKmh: 0, isPlayer: isUser, laps: 0, 
                     lastP: startP, totalP: 0, finished: false,
+                    onGrass: false,
                     name: isUser ? (document.getElementById('playerName').value || "Player") : "Bot " + i
                 };
                 
@@ -113,7 +114,10 @@
 
         async function loadModel() {
             const loader = new GLTFLoader();
-            try { const g = await loader.loadAsync('f1model.glb'); cachedModel = g.scene; } catch(e) {}
+            try { 
+                const g = await loader.loadAsync('f1model.glb'); 
+                cachedModel = g.scene; 
+            } catch(e) {}
         }
 
         function buildTrack(type) {
@@ -122,12 +126,16 @@
                 [new THREE.Vector3(-450,0,300), new THREE.Vector3(450,0,300), new THREE.Vector3(550,0,100), new THREE.Vector3(400,0,-150), new THREE.Vector3(0,0,-200), new THREE.Vector3(-400,0,-100), new THREE.Vector3(-550,0,100), new THREE.Vector3(-450,0,300)];
             
             trackCurve = new THREE.CatmullRomCurve3(pts, true);
-            const geo = new THREE.TubeGeometry(trackCurve, 200, 18, 8, true);
-            const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({color: 0x222222}));
-            mesh.scale.y = 0.01; scene.add(mesh);
+            const geo = new THREE.TubeGeometry(trackCurve, 200, 20, 8, true); // Pista mais larga
+            trackMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({color: 0x222222}));
+            trackMesh.scale.y = 0.01; 
+            trackMesh.position.y = 0; 
+            scene.add(trackMesh);
 
             const grass = new THREE.Mesh(new THREE.PlaneGeometry(5000,5000), new THREE.MeshLambertMaterial({color: 0x3b7d32}));
-            grass.rotation.x = -Math.PI/2; scene.add(grass);
+            grass.rotation.x = -Math.PI/2; 
+            grass.position.y = -0.1; // Grama levemente abaixo
+            scene.add(grass);
         }
 
         function createCar(color) {
@@ -144,49 +152,68 @@
             if(raceStatus !== 'racing') return;
             const dt = 1/60;
 
+            // CHECAR SE ESTÁ NA GRAMA (Punição)
+            // Calculamos a distância do carro até o ponto mais próximo da curva central da pista
+            let closestPt = trackCurve.getPointAt(checkProgress(player, true));
+            let distToCenter = new THREE.Vector2(player.position.x, player.position.z).distanceTo(new THREE.Vector2(closestPt.x, closestPt.z));
+            player.userData.onGrass = distToCenter > 18; // Se afastar mais de 18 unidades, está na grama
+
             // FÍSICA PLAYER
             if(keys['w'] && !player.userData.finished) {
-                player.userData.speedKmh += (player.userData.speedKmh < 200 ? 60 : 30) * dt;
-            } else { player.userData.speedKmh *= 0.99; }
+                let accelBase = (player.userData.speedKmh < 200 ? 65 : 35);
+                if(player.userData.onGrass) accelBase = 10; // Punir aceleração na grama
+                player.userData.speedKmh += accelBase * dt;
+            } else { 
+                player.userData.speedKmh *= 0.99; 
+            }
+            
+            if(player.userData.onGrass) player.userData.speedKmh *= 0.97; // Punir velocidade máxima na grama
             if(keys['s']) player.userData.speedKmh -= 100 * dt;
+            
             player.userData.speedKmh = Math.max(0, Math.min(340, player.userData.speedKmh));
 
-            // DIREÇÃO: Rotaciona o carro de verdade
-            if(keys['a']) player.rotation.y += 2.5 * dt;
-            if(keys['d']) player.rotation.y -= 2.5 * dt;
+            // DIREÇÃO
+            const steerSpeed = player.userData.onGrass ? 1.5 : 2.5; 
+            if(keys['a']) player.rotation.y += steerSpeed * dt;
+            if(keys['d']) player.rotation.y -= steerSpeed * dt;
 
-            // MOVE O CARRO PARA ONDE ELE ESTÁ APONTANDO
+            // MOVIMENTO (Sempre mantém Y=0.5)
             player.translateZ(player.userData.speedKmh / 3.6 * dt);
+            player.position.y = 0.5; 
 
-            // SISTEMA DE PROGRESSO (Para saber volta e posição)
-            checkProgress(player);
-
-            // IA SIMPLES
+            // IA
             cars.forEach(ai => {
                 if(ai.userData.finished) return;
-                const p = (ai.userData.lastP + 0.0005) % 1;
+                const p = (ai.userData.lastP + 0.0006) % 1;
                 const pos = trackCurve.getPointAt(p);
-                ai.position.copy(pos);
-                ai.lookAt(trackCurve.getPointAt((p + 0.001)%1));
+                ai.position.set(pos.x, 0.5, pos.z);
+                ai.lookAt(trackCurve.getPointAt((p + 0.001)%1).x, 0.5, trackCurve.getPointAt((p + 0.001)%1).z);
                 ai.userData.lastP = p;
                 checkProgress(ai);
             });
 
             // HUD
             document.getElementById('speedTxt').innerText = Math.floor(player.userData.speedKmh);
+            if(player.userData.onGrass) document.getElementById('speedTxt').style.color = "#ffaa00";
+            else document.getElementById('speedTxt').style.color = "white";
+
             for(let i=1; i<=8; i++) { if(player.userData.speedKmh < GEAR_LIMITS[i]) { document.getElementById('gearTxt').innerText = i; break; } }
             updateRanking();
         }
 
-        function checkProgress(car) {
-            // Acha o ponto da curva mais próximo do carro
+        function checkProgress(car, onlyCheck = false) {
             const pos = car.position;
             let closestP = 0, minDist = Infinity;
+            // Busca simplificada para performance
             for(let i=0; i<=100; i++) {
-                const d = pos.distanceTo(trackCurve.getPointAt(i/100));
-                if(d < minDist) { minDist = d; closestP = i/100; }
+                const testP = i/100;
+                const pPos = trackCurve.getPointAt(testP);
+                const d = pos.distanceTo(pPos);
+                if(d < minDist) { minDist = d; closestP = testP; }
             }
             
+            if(onlyCheck) return closestP;
+
             if(car.userData.lastP > 0.8 && closestP < 0.2) {
                 car.userData.laps++;
                 if(car.userData.isPlayer) document.getElementById('lapTxt').innerText = Math.min(car.userData.laps + 1, maxLaps);
@@ -230,7 +257,7 @@
             if(player) {
                 const cam = new THREE.Vector3(0, 4, -12).applyMatrix4(player.matrixWorld);
                 camera.position.lerp(cam, 0.1);
-                camera.lookAt(player.position.clone().add(new THREE.Vector3(0,1,0)));
+                camera.lookAt(player.position.x, 1.5, player.position.z);
             }
             renderer.render(scene, camera);
         }
@@ -238,7 +265,7 @@
         function endRace() {
             raceStatus = 'finished';
             const p = document.getElementById('podium');
-            p.innerHTML = "<b>RESULTADO:</b><br>";
+            p.innerHTML = "<b>TOP 5 RESULTADO:</b><br>";
             finishOrder.slice(0, 5).forEach((n, i) => p.innerHTML += `${i+1}º ${n}<br>`);
             document.getElementById('results-screen').style.display = 'flex';
         }
