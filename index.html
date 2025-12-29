@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>F1 Fix - Absolute Direction</title>
+    <title>F1 Pro - 3D Model Loaded</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
         #ui-layer { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; justify-content: space-between; padding: 30px; box-sizing: border-box; }
@@ -13,18 +13,24 @@
         .bulb.red { background: #ff0000; box-shadow: 0 0 30px #ff0000; }
         button { width: 100%; background: #e10600; color: white; border: none; padding: 12px; font-weight: bold; cursor: pointer; margin-top: 10px; }
         select, input { width: 100%; padding: 10px; margin: 10px 0; background: #222; color: white; border: 1px solid #444; }
+        #loading-screen { 
+            position: absolute; width: 100%; height: 100%; background: #000; color: white; 
+            display: none; align-items: center; justify-content: center; z-index: 1000; font-weight: bold;
+        }
     </style>
 </head>
 <body>
 
+    <div id="loading-screen">CARREGANDO MODELOS 3D...</div>
+
     <div id="ui-layer">
         <div class="panel" id="menu-setup">
-            <h2>F1 SIMULATOR</h2>
+            <h2>F1 SIMULATOR 3D</h2>
             <label>EQUIPE:</label>
             <select id="teamSelect"></select>
             <label>VOLTAS:</label>
             <input type="number" id="lapInput" value="3">
-            <button onclick="startGame()">IR PARA RACE</button>
+            <button onclick="startGame()">INICIAR GP</button>
         </div>
         <div class="panel" id="hud" style="display: none;">
             <h2>STATUS</h2>
@@ -42,11 +48,17 @@
     </div>
 
     <script type="importmap">
-        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
     </script>
 
     <script type="module">
         import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
         const TEAMS = [
             { name: "FERRARI", color: 0xe10600 }, { name: "MERCEDES", color: 0x00d2be },
@@ -56,6 +68,11 @@
         let scene, camera, renderer, player;
         let cars = [], isRacing = false, raceStatus = 'preparing';
         const TRACK_RADIUS = 300, TRACK_WIDTH = 25;
+        
+        // --- COLOQUE O LINK DO SEU GITHUB AQUI ---
+        const MODEL_URL = 'f1model.glb'; 
+
+        const loader = new GLTFLoader();
 
         const sel = document.getElementById('teamSelect');
         TEAMS.forEach((t, i) => sel.add(new Option(t.name, i)));
@@ -76,17 +93,19 @@
             return tex;
         }
 
-        function init() {
+        function initScene() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x87ceeb);
             camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 5000);
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-            const sun = new THREE.DirectionalLight(0xffffff, 1);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            const sun = new THREE.DirectionalLight(0xffffff, 1.2);
             sun.position.set(50, 200, 50);
+            sun.castShadow = true;
             scene.add(sun);
 
             const grass = new THREE.Mesh(new THREE.PlaneGeometry(10000, 10000), new THREE.MeshStandardMaterial({ map: createNoiseTexture('#3b7d32') }));
@@ -101,59 +120,70 @@
             scene.add(track);
         }
 
-        function createCar(color, isPlayer) {
+        async function createCar(color, isPlayer) {
             const group = new THREE.Group();
             
-            // ATENÇÃO: Geometria orientada para o Z (Frente do carro é no eixo Z)
-            const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 4.5), new THREE.MeshStandardMaterial({color}));
-            body.position.y = 0.4;
-            group.add(body);
-            
-            const wing = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.6, 0.2), new THREE.MeshStandardMaterial({color: 0x111111}));
-            wing.position.set(0, 0.8, -2.1); // Atrás do centro
-            group.add(wing);
+            // Placeholder (Box) enquanto o modelo não carrega ou se falhar
+            const placeholder = new THREE.Mesh(
+                new THREE.BoxGeometry(1.6, 0.5, 4.5), 
+                new THREE.MeshStandardMaterial({color, transparent: true, opacity: 0.5})
+            );
+            placeholder.position.y = 0.4;
+            group.add(placeholder);
 
-            const nose = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.2, 1), new THREE.MeshStandardMaterial({color}));
-            nose.position.set(0, 0.3, 2.5); // À frente do centro
-            group.add(nose);
+            // Carregar o modelo Real
+            try {
+                const gltf = await loader.loadAsync(MODEL_URL);
+                const model = gltf.scene;
+                
+                // Ajuste de escala (depende do tamanho do seu arquivo)
+                model.scale.set(1, 1, 1); 
+                
+                // Pintar o carro com a cor da equipe (opcional, se o modelo permitir)
+                model.traverse((child) => {
+                    if (child.isMesh && child.name.includes("body")) {
+                        child.material.color.set(color);
+                    }
+                });
+
+                group.remove(placeholder); // Remove o bloco cinza
+                group.add(model);
+            } catch (e) {
+                console.error("Erro ao carregar modelo 3D, usando placeholder", e);
+            }
 
             group.userData = { speed: 0, angle: 0, isPlayer, lane: (Math.random()-0.5)*15 };
             scene.add(group);
             return group;
         }
 
-        window.startGame = function() {
+        window.startGame = async function() {
+            document.getElementById('loading-screen').style.display = 'flex';
             document.getElementById('menu-setup').style.display = 'none';
-            document.getElementById('hud').style.display = 'block';
-            init();
+            
+            initScene();
 
             for(let i=0; i<20; i++) {
                 const team = TEAMS[i % TEAMS.length];
                 const isUser = (i === 0);
-                const car = createCar(team.color, isUser);
+                const car = await createCar(team.color, isUser);
                 
                 const row = Math.floor(i / 2);
                 const side = (i % 2 === 0) ? 6 : -6;
-                
-                // Posição no círculo
                 const gridAngle = -(row * 15) / TRACK_RADIUS; 
                 const radius = TRACK_RADIUS + side;
+                
                 car.position.set(Math.cos(gridAngle) * radius, 0, Math.sin(gridAngle) * radius);
-                
-                // ALINHAMENTO FORÇADO:
-                // Miramos um ponto 1 metro à frente na curva.
                 const lookAngle = gridAngle + 0.01; 
-                const targetX = Math.cos(lookAngle) * radius;
-                const targetZ = Math.sin(lookAngle) * radius;
-                car.lookAt(targetX, 0, targetZ);
-                
-                // SINCRONIA TOTAL: 
-                // userData.angle agora recebe a rotação Y real gerada pelo LookAt
+                car.lookAt(Math.cos(lookAngle) * radius, 0, Math.sin(lookAngle) * radius);
                 car.userData.angle = car.rotation.y;
 
                 if(isUser) player = car;
                 else cars.push(car);
             }
+
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('hud').style.display = 'block';
             startCountdown();
         }
 
@@ -181,31 +211,26 @@
         window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
 
         function update() {
-            // Travamos a rotação do player enquanto o semáforo estiver aceso
             if(raceStatus !== 'racing') {
                 if(player) player.rotation.y = player.userData.angle;
                 return;
             }
 
-            // Player Physics
             if(keys['w']) player.userData.speed += 0.03;
             if(keys['s']) player.userData.speed -= 0.05;
-            player.userData.speed *= 0.98;
+            player.userData.speed *= 0.985;
             
             if(Math.abs(player.userData.speed) > 0.01) {
                 const turn = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
                 player.userData.angle += turn * 0.04 * (player.userData.speed/1.5);
             }
-            
             player.rotation.y = player.userData.angle;
-            // Usando translateZ garantimos que o movimento segue a orientação visual
             player.translateZ(player.userData.speed);
 
-            // IA Physics
             cars.forEach((ai, i) => {
                 const curA = Math.atan2(ai.position.z, ai.position.x);
                 const nextA = curA + 0.04; 
-                ai.lookAt(Math.cos(nextA)*(TRACK_RADIUS+ai.userData.lane), 0.4, Math.sin(nextA)*(TRACK_RADIUS+ai.userData.lane));
+                ai.lookAt(Math.cos(nextA)*(TRACK_RADIUS+ai.userData.lane), 0, Math.sin(nextA)*(TRACK_RADIUS+ai.userData.lane));
                 ai.translateZ(1.1);
             });
 
