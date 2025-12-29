@@ -177,6 +177,10 @@
             
             if (cachedModel) {
                 const model = cachedModel.clone();
+				// --- AJUSTE AQUI ---
+        // Se estiver muito enterrado, aumente este valor (ex: 0.5, 0.8, 1.2)
+        // Se estiver flutuando, diminua.
+				model.position.y = 0.5;
                 model.traverse(child => {
                     if (child.isMesh && child.name.toLowerCase().includes("body")) {
                         child.material = child.material.clone();
@@ -303,3 +307,4 @@
     </script>
 </body>
 </html>
+
