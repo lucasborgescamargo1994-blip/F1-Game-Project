@@ -256,35 +256,78 @@
         window.onkeydown = (e) => keys[e.key.toLowerCase()] = true;
         window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
 
-        function update() {
-            if(raceStatus !== 'racing') {
-                if(player) player.rotation.y = player.userData.angle;
-                return;
+        // --- NOVAS VARIÁVEIS DE CALIBRAGEM ---
+let currentGear = 1;
+// KMH de cada marcha (7ª termina em 280, 8ª vai até 320)
+const GEAR_LIMITS = [0, 80, 120, 160, 180, 230, 250, 270, 300]; 
+// Aceleração potente (0.3 é muito forte, vai subir rápido)
+const ACCEL_POWER = 0.55; 
+
+function update() {
+    if(raceStatus !== 'racing') {
+        if(player) player.rotation.y = player.userData.angle;
+        return;
+    }
+
+    // 1. Velocidade atual em KM/H (usando 320 como base de escala)
+    let speedKmh = player.userData.speed * 320; 
+
+    // 2. Lógica de Marchas e Aceleração
+    if(keys['w']) {
+        // Define a marcha
+        for(let i = 1; i <= 8; i++) {
+            if(speedKmh < GEAR_LIMITS[i]) {
+                currentGear = i;
+                break;
             }
-
-            // Jogador
-            if(keys['w']) player.userData.speed += 0.035;
-            if(keys['s']) player.userData.speed -= 0.06;
-            player.userData.speed *= 0.985;
-            
-            if(Math.abs(player.userData.speed) > 0.01) {
-                const turn = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
-                player.userData.angle += turn * 0.04 * (player.userData.speed/1.8);
-            }
-            player.rotation.y = player.userData.angle;
-            player.translateZ(player.userData.speed);
-
-            // IA
-            cars.forEach(ai => {
-                const curA = Math.atan2(ai.position.z, ai.position.x);
-                const nextA = curA + 0.04; 
-                const r = TRACK_RADIUS + ai.userData.lane;
-                ai.lookAt(Math.cos(nextA)*r, 0, Math.sin(nextA)*r);
-                ai.translateZ(1.15);
-            });
-
-            document.getElementById('speedTxt').innerText = Math.floor(player.userData.speed * 315);
         }
+
+        // Multiplicador de aceleração: 
+        // 1.0 (máximo) até 280km/h. 
+        // Depois disso, cai drasticamente para simular a dificuldade da 8ª marcha.
+        let accelMult = (speedKmh > 305) ? 0.15 : 1.0; 
+        
+        player.userData.speed += (ACCEL_POWER * accelMult) * 0.01;
+    }
+
+    // 3. Arrasto Aerodinâmico Progressivo
+    // O segredo aqui é o 'drag' ser bem alto (0.995) para não segurar o carro antes da hora
+    let drag = 0.994; 
+    if (speedKmh > 320) drag = 0.991; // Segura um pouco mais acima de 280
+    
+    player.userData.speed *= drag;
+
+    // 4. Freio e Ré
+    if(keys['s']) player.userData.speed -= 0.04;
+    if(player.userData.speed < 0) player.userData.speed = 0;
+
+    // 5. Limite Final
+    if(speedKmh > 320) player.userData.speed = 320 / 320;
+
+    // 6. Direção
+    if(player.userData.speed > 0.005) {
+        const turn = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
+        // Em alta velocidade o carro vira menos (Understeer)
+        let steeringFactor = (speedKmh > 250) ? 0.4 : 0.8;
+        player.userData.angle += turn * 0.04 * steeringFactor;
+    }
+
+    player.rotation.y = player.userData.angle;
+    player.translateZ(player.userData.speed);
+
+    // --- IA (Acompanhando o ritmo) ---
+    cars.forEach(ai => {
+        const curA = Math.atan2(ai.position.z, ai.position.x);
+        const nextA = curA + 0.035; 
+        const r = TRACK_RADIUS + ai.userData.lane;
+        ai.lookAt(Math.cos(nextA)*r, 0, Math.sin(nextA)*r);
+        ai.translateZ(0.9); // IA constante por volta de 290kmh
+    });
+
+    // --- HUD ---
+    document.getElementById('speedTxt').innerText = Math.floor(player.userData.speed * 320);
+    document.getElementById('posTxt').innerHTML = `MARCHA: <span style="color:#e10600">${currentGear}</span>`;
+}
 
         function animate() {
             requestAnimationFrame(animate);
