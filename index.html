@@ -214,9 +214,11 @@
 cars.forEach(ai => {
     if(ai.userData.finished) return;
 
-    // 1. Aceleração da IA (Sincronizada com seu multiplicador de 2.5)
-    if(ai.userData.speed < 1.05) ai.userData.speed += 0.004;
-    
+	// Lógica de Retomada: se a velocidade cair muito (pós-batida), ela acelera 5x mais rápido
+	if(ai.userData.speed < 1.05) {
+    let boost = (ai.userData.speed < 0.3) ? 0.02 : 0.004; 
+    ai.userData.speed += boost;
+    }
     // 2. Lógica de "Radar" para Ultrapassagem
     // A IA verifica se há alguém na frente dela na mesma faixa
     const detectionRange = 15; // Distância de detecção
