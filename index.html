@@ -2,23 +2,50 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>F1 Grand Prix - Full Simulation</title>
+    <title>F1 Grand Prix - Custom Camera</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; user-select: none; }
+        
+        /* UI GERAL */
         #ui-layer { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; justify-content: center; align-items: center; }
-        .panel { width: 350px; background: rgba(15, 15, 15, 0.98); border: 2px solid #e10600; color: white; padding: 25px; pointer-events: all; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .panel { width: 350px; background: rgba(15, 15, 15, 0.98); border: 2px solid #e10600; color: white; padding: 25px; pointer-events: all; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+        
+        /* HUD */
         #hud { position: absolute; top: 20px; left: 20px; width: 220px; display: none; pointer-events: none; }
         .stat-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
         .stat-label { font-size: 11px; color: #aaa; }
         .stat-val { font-size: 18px; font-weight: bold; }
+        
+        /* LUZES */
         #lights-container { position: absolute; top: 5%; left: 50%; transform: translateX(-50%); background: #111; padding: 15px; border-radius: 10px; display: none; border: 4px solid #333; z-index: 100; }
         .light-row { display: flex; gap: 15px; }
         .bulb { width: 40px; height: 40px; background: #222; border-radius: 50%; }
         .bulb.red { background: #ff0000; box-shadow: 0 0 30px #ff0000; }
-        button { width: 100%; background: #e10600; color: white; border: none; padding: 15px; font-weight: bold; cursor: pointer; margin-top: 15px; font-size: 16px; border-radius: 4px; }
+        
+        /* ELEMENTOS DE FORMULÁRIO */
+        button { width: 100%; background: #e10600; color: white; border: none; padding: 15px; font-weight: bold; cursor: pointer; margin-top: 10px; font-size: 16px; border-radius: 4px; transition: 0.2s; }
+        button:hover { background: #ff2211; }
         label { display: block; margin-top: 12px; font-size: 12px; color: #aaa; }
         select, input { width: 100%; padding: 12px; margin: 5px 0 10px 0; background: #222; color: white; border: 1px solid #444; border-radius: 4px; box-sizing: border-box; }
+        
+        /* TELAS */
         #results-screen { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.9); color: white; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; pointer-events: all; }
+        
+        /* MENU DE PAUSA */
+        #pause-menu { display: none; position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 3000; flex-direction: column; align-items: center; justify-content: center; pointer-events: all; }
+        .pause-btn { width: 300px; margin: 10px; border: 1px solid #444; background: #111; }
+        .pause-btn:hover { background: #e10600; border-color: #e10600; }
+
+        /* EDITOR DE CÂMERA */
+        #camera-editor { display: none; position: absolute; bottom: 50px; right: 50px; width: 280px; background: rgba(0,0,0,0.9); border: 2px solid #00d2be; padding: 20px; border-radius: 10px; z-index: 4000; pointer-events: all; color: white; }
+        .cam-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-bottom: 15px; }
+        .cam-btn { background: #333; padding: 10px; font-size: 20px; margin: 0; }
+        .cam-btn:active { background: #00d2be; }
+        .cam-label { grid-column: 1 / -1; text-align: center; font-size: 12px; color: #00d2be; margin-bottom: 5px; margin-top: 10px; text-transform: uppercase; }
+        .action-row { display: flex; gap: 10px; margin-top: 15px; }
+        .save-btn { background: #00d2be; color: black; }
+        .reset-btn { background: #444; }
+
     </style>
 </head>
 <body>
@@ -30,7 +57,7 @@
     </div>
 
     <div id="ui-layer">
-        <div class="panel">
+        <div class="panel" id="main-menu">
             <h2 style="color: #e10600; text-align: center;">F1 GP SETUP</h2>
             <label>NOME DO PILOTO:</label><input type="text" id="playerName" placeholder="Senna">
             <label>EQUIPE:</label><select id="teamSelect"></select>
@@ -38,6 +65,39 @@
             <select id="lapLimit"><option value="1">1 Volta</option><option value="3" selected>3 Voltas</option><option value="5">5 Voltas</option></select>
             <button onclick="startGame()">IR PARA A PISTA</button>
         </div>
+    </div>
+
+    <div id="pause-menu">
+        <h1 style="color: white; font-style: italic;">JOGO PAUSADO</h1>
+        <button class="pause-btn" onclick="togglePause()">RETOMAR (RESUME)</button>
+        <button class="pause-btn" onclick="openCameraEditor()">AJUSTAR CÂMERA</button>
+        <button class="pause-btn" onclick="location.reload()">SAIR (EXIT)</button>
+    </div>
+
+    <div id="camera-editor">
+        <h3 style="text-align: center; margin: 0 0 15px 0;">CONFIGURAR CÂMERA</h3>
+        
+        <div class="cam-label">Ângulo / Posição</div>
+        <div class="cam-controls">
+            <div></div>
+            <button class="cam-btn" onclick="adjustCam('height', 0.5)">▲</button>
+            <div></div>
+            <button class="cam-btn" onclick="adjustCam('dist', 1)">◀</button>
+            <button class="cam-btn" onclick="adjustCam('height', -0.5)">▼</button>
+            <button class="cam-btn" onclick="adjustCam('dist', -1)">▶</button>
+        </div>
+
+        <div class="cam-label">Zoom (FOV)</div>
+        <div class="action-row">
+            <button class="cam-btn" onclick="adjustCam('fov', -2)">-</button>
+            <button class="cam-btn" onclick="adjustCam('fov', 2)">+</button>
+        </div>
+
+        <div class="action-row">
+            <button class="reset-btn" onclick="resetCamera()">PADRÃO</button>
+            <button class="save-btn" onclick="closeCameraEditor()">GRAVAR</button>
+        </div>
+        <div style="text-align: center; font-size: 10px; color: #666; margin-top: 5px;">Use as setas para Altura e Distância</div>
     </div>
 
     <div id="hud" class="panel">
@@ -67,10 +127,62 @@
         const TRACK_RADIUS = 300, TRACK_WIDTH = 25;
         const keys = {};
         const CAR_Y = 0.78; 
+        
+        // --- NOVO: Configurações de Câmera e Pause ---
+        let isPaused = false;
+        let camConfig = {
+            height: 4.0,   // Altura padrão
+            dist: -12.0,   // Distância padrão (negativo é atrás)
+            fov: 60        // FOV padrão
+        };
+        const defaultCamConfig = { ...camConfig }; // Cópia para resetar
 
         // Setup inicial das equipes
         const teamSel = document.getElementById('teamSelect');
         TEAMS.forEach((t, i) => teamSel.add(new Option(t.name, i)));
+
+        // --- FUNÇÕES GLOBAIS (PAUSE/CAMERA) ---
+        window.togglePause = function() {
+            if(raceStatus === 'preparing' || raceStatus === 'finished') return;
+            
+            isPaused = !isPaused;
+            const menu = document.getElementById('pause-menu');
+            const camEdit = document.getElementById('camera-editor');
+            
+            if(isPaused) {
+                menu.style.display = 'flex';
+            } else {
+                menu.style.display = 'none';
+                camEdit.style.display = 'none'; // Garante que o editor feche ao despausar
+            }
+        };
+
+        window.openCameraEditor = function() {
+            document.getElementById('pause-menu').style.display = 'none';
+            document.getElementById('camera-editor').style.display = 'block';
+        };
+
+        window.closeCameraEditor = function() {
+            document.getElementById('camera-editor').style.display = 'none';
+            document.getElementById('pause-menu').style.display = 'flex';
+        };
+
+        window.adjustCam = function(prop, val) {
+            camConfig[prop] += val;
+            // Limites básicos
+            if(prop === 'fov') camConfig.fov = Math.max(30, Math.min(120, camConfig.fov));
+        };
+
+        window.resetCamera = function() {
+            camConfig = { ...defaultCamConfig };
+        };
+
+        // Captura da tecla ESC
+        window.onkeydown = (e) => {
+            if(e.key === "Escape") togglePause();
+            else keys[e.key.toLowerCase()] = true;
+        };
+        window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
 
         async function startGame() {
             if(!document.getElementById('playerName').value) { alert("Insira seu nome!"); return; }
@@ -163,51 +275,48 @@
         }
 
         function handleCollisions() {
-    const all = [player, ...cars];
-    for(let i=0; i<all.length; i++) {
-        for(let j=i+1; j<all.length; j++) {
-            const dist = all[i].position.distanceTo(all[j].position);
-            
-            if(dist < 3.0) { 
-                // Penalidades de velocidade (IA perde quase nada)
-                all[i].userData.speed *= all[i].userData.isPlayer ? 0.85 : 0.98;
-                all[j].userData.speed *= all[j].userData.isPlayer ? 0.85 : 0.98;
-                
-                // --- SISTEMA DE VINGANÇA ---
-                // Se o Player bater em um Bot (ou vice-versa)
-                if(all[i].userData.isPlayer || all[j].userData.isPlayer) {
-                    const bot = all[i].userData.isPlayer ? all[j] : all[i];
-                    bot.userData.revengeMode = true;
-                    bot.userData.revengeTimer = 300; // 5 segundos de fúria (60 frames * 5)
-                }
+            const all = [player, ...cars];
+            for(let i=0; i<all.length; i++) {
+                for(let j=i+1; j<all.length; j++) {
+                    const dist = all[i].position.distanceTo(all[j].position);
+                    
+                    if(dist < 3.0) { 
+                        // Penalidades de velocidade
+                        all[i].userData.speed *= all[i].userData.isPlayer ? 0.85 : 0.98;
+                        all[j].userData.speed *= all[j].userData.isPlayer ? 0.85 : 0.98;
+                        
+                        // --- SISTEMA DE VINGANÇA ---
+                        if(all[i].userData.isPlayer || all[j].userData.isPlayer) {
+                            const bot = all[i].userData.isPlayer ? all[j] : all[i];
+                            bot.userData.revengeMode = true;
+                            bot.userData.revengeTimer = 300; 
+                        }
 
-                if(all[i].userData.isPlayer) all[i].translateZ(-0.1);
+                        if(all[i].userData.isPlayer) all[i].translateZ(-0.1);
+                    }
+                }
             }
-        }
-    }
-}
+        } // <--- CHAVE CORRIGIDA QUE FALTAVA NO SEU CÓDIGO ORIGINAL
 
         function update() {
-            if(raceStatus !== 'racing') return;
+            // Se estiver pausado, não atualiza física nem IA, apenas retorna
+            if(raceStatus !== 'racing' || isPaused) return;
+
             const dt = 1/60;
 
             // --- PLAYER PHYSICS ---
             let speedKmh = player.userData.speed * 320;
             
             if(keys['w'] && !player.userData.finished) {
-                // Aceleração potente
                 let accelBase = (speedKmh < 200) ? 0.008 : 0.005;
                 player.userData.speed += accelBase;
             }
             
-            // ATRITO CALIBRADO PARA PASSAR DE 300 KM/H
-            // Se passar de 340 o atrito aumenta muito (limite real)
             player.userData.speed *= (speedKmh > 340) ? 0.990 : 0.995;
             
             if(keys['s']) player.userData.speed -= 0.03;
             player.userData.speed = Math.max(0, player.userData.speed);
 
-            // DIREÇÃO PROPORCIONAL
             let steerPower = Math.min(speedKmh / 150, 1.0) * 0.035;
             if(keys['a']) player.userData.angle += steerPower;
             if(keys['d']) player.userData.angle -= steerPower;
@@ -216,66 +325,56 @@
             player.translateZ(player.userData.speed * 2.5);
             player.position.y = CAR_Y;
 
-           // --- IA Lógica de Movimento e Ultrapassagem ---
-cars.forEach(ai => {
-    if(ai.userData.finished) return;
+            // --- IA ---
+            cars.forEach(ai => {
+                if(ai.userData.finished) return;
 
-	// Lógica de Retomada: se a velocidade cair muito (pós-batida), ela acelera 5x mais rápido
-	if(ai.userData.speed < 1.05) {
-    let boost = (ai.userData.speed < 0.3) ? 0.02 : 0.004; 
-    ai.userData.speed += boost;
-    }
-    // 2. Lógica de "Radar" para Ultrapassagem
-    // A IA verifica se há alguém na frente dela na mesma faixa
-    const detectionRange = 15; // Distância de detecção
-    let carInFront = false;
+                // Lógica de Retomada
+                if(ai.userData.speed < 1.05) {
+                    let boost = (ai.userData.speed < 0.3) ? 0.02 : 0.004; 
+                    ai.userData.speed += boost;
+                }
 
-    [player, ...cars].forEach(other => {
-        if (other === ai) return;
-        
-        // Calcula a distância angular aproximada
-        const dist = Math.abs(ai.userData.lastAngle - other.userData.lastAngle);
-        // Se estiverem na mesma faixa e próximos
-        if (dist < 0.05 && ai.userData.lane === other.userData.lane) {
-            carInFront = true;
-        }
-    });
+                // Radar
+                const detectionRange = 15; 
+                let carInFront = false;
 
-    // 3. Tomada de Decisão: Mudar de faixa?
-    if (carInFront) {
-        // Tenta mudar para uma faixa aleatória (Esquerda ou Direita)
-        const targetLane = (Math.random() > 0.5) ? 6 : -6;
-        // Move suavemente para a nova faixa
-        ai.userData.lane = THREE.MathUtils.lerp(ai.userData.lane, targetLane, 0.05);
-    }
+                [player, ...cars].forEach(other => {
+                    if (other === ai) return;
+                    const dist = Math.abs(ai.userData.lastAngle - other.userData.lastAngle);
+                    if (dist < 0.05 && ai.userData.lane === other.userData.lane) {
+                        carInFront = true;
+                    }
+                });
 
-    // 4. Movimento Angular (O multiplicador 2.5 que você aplicou)
-    const speedMultiplier = 2.5; 
-    const nextA = ai.userData.lastAngle + (ai.userData.speed / TRACK_RADIUS) * speedMultiplier;
-    
-    // Calcula a posição final baseada no raio + faixa atual
-    const r = TRACK_RADIUS + ai.userData.lane;
-    
-    ai.position.set(Math.cos(nextA) * r, CAR_Y, Math.sin(nextA) * r);
-    ai.lookAt(Math.cos(nextA + 0.1) * r, CAR_Y, Math.sin(nextA + 0.1) * r);
-    
-    ai.userData.lastAngle = nextA;
-    checkLap(ai);
-});
+                // Decisão
+                if (carInFront) {
+                    const targetLane = (Math.random() > 0.5) ? 6 : -6;
+                    ai.userData.lane = THREE.MathUtils.lerp(ai.userData.lane, targetLane, 0.05);
+                }
+
+                const speedMultiplier = 2.5; 
+                const nextA = ai.userData.lastAngle + (ai.userData.speed / TRACK_RADIUS) * speedMultiplier;
+                const r = TRACK_RADIUS + ai.userData.lane;
+                
+                ai.position.set(Math.cos(nextA) * r, CAR_Y, Math.sin(nextA) * r);
+                ai.lookAt(Math.cos(nextA + 0.1) * r, CAR_Y, Math.sin(nextA + 0.1) * r);
+                
+                ai.userData.lastAngle = nextA;
+                checkLap(ai);
+            });
 
             handleCollisions();
             checkLap(player);
             
-            // HUD UPDATE
+            // HUD
             const kmhDisplay = Math.floor(player.userData.speed * 320);
             document.getElementById('speedTxt').innerText = kmhDisplay;
             
-            // Cálculo da Marcha
             let gear = 1;
             for(let i=1; i<=8; i++) { if(kmhDisplay >= GEAR_LIMITS[i-1]) gear = i; }
             document.getElementById('gearTxt').innerText = gear;
 
-            // Ranking
             const sorted = [player, ...cars].sort((a,b) => (b.userData.laps * 10 + b.userData.totalDist) - (a.userData.laps * 10 + a.userData.totalDist));
             document.getElementById('posTxt').innerText = sorted.findIndex(c => c.userData.isPlayer) + 1;
         }
@@ -307,15 +406,23 @@ cars.forEach(ai => {
             requestAnimationFrame(animate);
             update();
             if(player) {
-                const cp = new THREE.Vector3(0, 4, -12).applyMatrix4(player.matrixWorld);
+                // --- ATUALIZAÇÃO DA CÂMERA (COM O NOVO OBJETO CAMCONFIG) ---
+                // Agora usamos camConfig.height e camConfig.dist
+                // O dist é o eixo Z relativo ao carro (negativo é atrás)
+                const cp = new THREE.Vector3(0, camConfig.height, camConfig.dist).applyMatrix4(player.matrixWorld);
                 camera.position.lerp(cp, 0.1);
+                
+                // O FOV ainda pode ter o efeito de velocidade, mas baseado na config
+                // Se estiver pausado, o efeito de velocidade para
+                const speedEffect = isPaused ? 0 : (player.userData.speed * 20);
+                camera.fov = camConfig.fov + speedEffect;
+                camera.updateProjectionMatrix();
+
                 camera.lookAt(player.position.x, 1.2, player.position.z);
             }
             renderer.render(scene, camera);
         }
 
-        window.onkeydown = (e) => keys[e.key.toLowerCase()] = true;
-        window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
         window.startGame = startGame;
     </script>
 </body>
