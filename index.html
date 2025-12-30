@@ -170,7 +170,7 @@
         window.adjustCam = function(prop, val) {
             camConfig[prop] += val;
             // Limites básicos
-            if(prop === 'fov') camConfig.fov = Math.max(30, Math.min(120, camConfig.fov));
+            if(prop === 'fov') camConfig.fov = Math.max(1, Math.min(120, camConfig.fov));
         };
 
         window.resetCamera = function() {
