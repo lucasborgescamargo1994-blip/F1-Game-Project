@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>F1 Pro - Real Steering</title>
+    <title>F1 Grand Prix - Pro Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
         #ui-layer { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; justify-content: center; align-items: center; }
@@ -23,78 +23,102 @@
 </head>
 <body>
 
-    <div id="loading-screen"><h2>CALIBRANDO DIREÇÃO...</h2></div>
+    <div id="loading-screen"><h2>CALIBRANDO MOTORES...</h2></div>
+    
     <div id="results-screen">
-        <h1>FIM DE PROVA</h1>
+        <h1 style="color: #e10600">FIM DE PROVA</h1>
         <div id="podium" style="background: #222; padding: 20px; border-radius: 10px; width: 300px;"></div>
         <button onclick="location.reload()">NOVA CORRIDA</button>
     </div>
 
     <div id="ui-layer">
-        <div class="panel">
-            <h2 style="color: #e10600; text-align: center;">F1 GP SETUP</h2>
-            <label>PILOTO:</label><input type="text" id="playerName" placeholder="Nome">
-            <label>PISTA:</label>
+        <div class="panel" id="menu-setup">
+            <h2 style="color: #e10600; text-align: center;">F1 GP SIMULATOR</h2>
+            <label>NOME DO PILOTO:</label><input type="text" id="playerName" placeholder="Senna">
+            <label>SELECIONAR CIRCUITO:</label>
             <select id="trackSelect">
+                <option value="bahrain">Bahrein (Original)</option>
+                <option value="interlagos">Interlagos (Brasil)</option>
                 <option value="oval">Indianapolis (Oval)</option>
-                <option value="bahrain" selected>Bahrein GP (Real)</option>
             </select>
-            <button onclick="startGame()">INICIAR</button>
+            <button onclick="startGame()">IR PARA O GRID</button>
         </div>
     </div>
 
     <div id="hud" class="panel">
-        <div class="stat-row"><div><div class="stat-label">POS</div><div class="stat-val" id="posTxt">1</div></div><div style="text-align: right"><div class="stat-label">VOLTA</div><div class="stat-val" id="lapTxt">1/3</div></div></div>
-        <div class="stat-row" style="margin-top: 10px"><div><div class="stat-label">MARCHA</div><div class="stat-val" style="color:#e10600">M<span id="gearTxt">1</span></div></div><div style="text-align: right"><div class="stat-label">VELOCIDADE</div><div class="stat-val"><span id="speedTxt">0</span> KM/H</div></div></div>
+        <div class="stat-row">
+            <div><div class="stat-label">POS</div><div class="stat-val" id="posTxt">1</div></div>
+            <div style="text-align: right"><div class="stat-label">VOLTA</div><div class="stat-val" id="lapTxt">1/3</div></div>
+        </div>
+        <div class="stat-row" style="margin-top: 10px">
+            <div><div class="stat-label">MARCHA</div><div class="stat-val" style="color:#e10600">M<span id="gearTxt">1</span></div></div>
+            <div style="text-align: right"><div class="stat-label">VELOCIDADE</div><div class="stat-val"><span id="speedTxt">0</span> KM/H</div></div>
+        </div>
     </div>
 
-    <div id="lights-container"><div class="light-row"><div id="L1" class="bulb"></div><div id="L2" class="bulb"></div><div id="L3" class="bulb"></div><div id="L4" class="bulb"></div><div id="L5" class="bulb"></div></div></div>
+    <div id="lights-container">
+        <div class="light-row">
+            <div id="L1" class="bulb"></div><div id="L2" class="bulb"></div>
+            <div id="L3" class="bulb"></div><div id="L4" class="bulb"></div>
+            <div id="L5" class="bulb"></div>
+        </div>
+    </div>
 
-    <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }</script>
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+    </script>
 
-    <script	type="module">
-        
-
-    
-    // ADICIONE ESTA LINHA AQUI:
-    import { TRACK_DATA } from './tracks.js';
-		import * as THREE from 'three';
+    <script type="module">
+        import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+        // ==========================================
+        // DATABASE DE PISTAS (Adicione novas aqui!)
+        // ==========================================
+        const TRACK_DATA = {
+            "bahrain": {
+                points: [new THREE.Vector3(-450,0,300), new THREE.Vector3(450,0,300), new THREE.Vector3(550,0,100), new THREE.Vector3(400,0,-150), new THREE.Vector3(0,0,-200), new THREE.Vector3(-400,0,-100), new THREE.Vector3(-550,0,100), new THREE.Vector3(-450,0,300)],
+                width: 22, grass: 18
+            },
+            "interlagos": {
+                points: [new THREE.Vector3(0,0,0), new THREE.Vector3(250,0,50), new THREE.Vector3(350,0,250), new THREE.Vector3(150,0,450), new THREE.Vector3(-150,0,400), new THREE.Vector3(-300,0,200), new THREE.Vector3(-100,0,0), new THREE.Vector3(0,0,0)],
+                width: 20, grass: 16
+            },
+            "oval": {
+                points: new THREE.EllipseCurve(0, 0, 450, 300).getPoints(100).map(p => new THREE.Vector3(p.x, 0, p.y)),
+                width: 25, grass: 20
+            }
+        };
+
+        // ==========================================
+        // VARIÁVEIS GLOBAIS
+        // ==========================================
         let scene, camera, renderer, player, cachedModel, trackCurve;
         let cars = [], raceStatus = 'preparing', startTime = 0, finishOrder = [];
         const keys = {};
-        const CAR_Y = 0.75; // AJUSTE FINO DA ALTURA AQUI
+        
+        // --- AJUSTE FINO DE ALTURA ---
+        const CAR_HEIGHT = 0.78; 
 
+        // ==========================================
+        // INICIALIZAÇÃO
+        // ==========================================
         async function startGame() {
+            const trackId = document.getElementById('trackSelect').value;
             document.getElementById('ui-layer').style.display = 'none';
             document.getElementById('loading-screen').style.display = 'flex';
 
-            initBase();
-            await loadModel();
-            buildTrack(document.getElementById('trackSelect').value);
-
-            for(let i=0; i<20; i++) {
-                const isUser = (i === 0);
-                const car = createCar(isUser ? 0xe10600 : 0x333333);
-                const startP = 0.99 - (i * 0.007);
-                const pos = trackCurve.getPointAt(startP);
-                const tan = trackCurve.getTangentAt(startP);
-                
-                car.position.set(pos.x, CAR_Y, pos.z); 
-                car.lookAt(pos.x + tan.x, CAR_Y, pos.z + tan.z);
-                car.userData = { speedKmh: 0, isPlayer: isUser, lastP: startP, totalP: 0, laps: 0, finished: false, name: isUser ? "Você" : "Bot "+i };
-                
-                scene.add(car);
-                if(isUser) player = car; else cars.push(car);
-            }
+            initEngine();
+            await loadCarModel();
+            createCircuit(trackId);
+            spawnGrid();
 
             document.getElementById('loading-screen').style.display = 'none';
             document.getElementById('hud').style.display = 'block';
-            startCountdown();
+            startRaceCountdown();
         }
 
-        function initBase() {
+        function initEngine() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x87ceeb);
             camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 5000);
@@ -102,72 +126,108 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
             scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+            const sun = new THREE.DirectionalLight(0xffffff, 0.5);
+            sun.position.set(10, 50, 10);
+            scene.add(sun);
         }
 
-        async function loadModel() {
-            try { const g = await new GLTFLoader().loadAsync('f1model.glb'); cachedModel = g.scene; } catch(e) {}
+        async function loadCarModel() {
+            try { 
+                const loader = new GLTFLoader();
+                const gltf = await loader.loadAsync('f1model.glb');
+                cachedModel = gltf.scene;
+            } catch(e) { console.warn("Modelo não encontrado, usando cubos."); }
         }
 
-        function buildTrack(type) {
-            const pts = (type === 'oval') ? 
-                new THREE.EllipseCurve(0, 0, 450, 300).getPoints(100).map(p => new THREE.Vector3(p.x, 0, p.y)) :
-                [new THREE.Vector3(-450,0,300), new THREE.Vector3(450,0,300), new THREE.Vector3(550,0,100), new THREE.Vector3(400,0,-150), new THREE.Vector3(0,0,-200), new THREE.Vector3(-400,0,-100), new THREE.Vector3(-550,0,100), new THREE.Vector3(-450,0,300)];
-            trackCurve = new THREE.CatmullRomCurve3(pts, true);
-            const geo = new THREE.TubeGeometry(trackCurve, 200, 22, 8, true);
-            const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({color: 0x222222}));
-            mesh.scale.y = 0.01; scene.add(mesh);
-            const grass = new THREE.Mesh(new THREE.PlaneGeometry(5000,5000), new THREE.MeshLambertMaterial({color: 0x3b7d32}));
-            grass.rotation.x = -Math.PI/2; grass.position.y = -0.05; scene.add(grass);
+        function createCircuit(id) {
+            const data = TRACK_DATA[id];
+            trackCurve = new THREE.CatmullRomCurve3(data.points, true);
+            
+            const geo = new THREE.TubeGeometry(trackCurve, 200, data.width, 8, true);
+            const mat = new THREE.MeshLambertMaterial({color: 0x222222});
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.scale.y = 0.01;
+            scene.add(mesh);
+
+            const grass = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshLambertMaterial({color: 0x3b7d32}));
+            grass.rotation.x = -Math.PI/2;
+            grass.position.y = -0.1;
+            scene.add(grass);
         }
 
-        function createCar(color) {
-            const g = new THREE.Group();
-            if(cachedModel) {
-                const m = cachedModel.clone();
-                m.traverse(c => { if(c.isMesh) { c.material = c.material.clone(); if(c.name.includes("body")) c.material.color.set(color); }});
-                g.add(m);
-            } else { g.add(new THREE.Mesh(new THREE.BoxGeometry(2,1,4), new THREE.MeshLambertMaterial({color}))); }
-            return g;
+        function spawnGrid() {
+            for(let i=0; i<20; i++) {
+                const isPlayer = (i === 0);
+                const car = new THREE.Group();
+                
+                if(cachedModel) {
+                    const m = cachedModel.clone();
+                    m.traverse(c => { if(c.isMesh) {
+                        c.material = c.material.clone();
+                        if(c.name.includes("body")) c.material.color.set(isPlayer ? 0xe10600 : 0x444444);
+                    }});
+                    car.add(m);
+                } else {
+                    const box = new THREE.Mesh(new THREE.BoxGeometry(2,1,4), new THREE.MeshLambertMaterial({color: isPlayer?0xff0000:0x555555}));
+                    car.add(box);
+                }
+
+                const p = 0.99 - (i * 0.007);
+                const pos = trackCurve.getPointAt(p);
+                const tan = trackCurve.getTangentAt(p);
+                
+                car.position.set(pos.x, CAR_HEIGHT, pos.z);
+                car.lookAt(pos.x + tan.x, CAR_HEIGHT, pos.z + tan.z);
+                
+                car.userData = { speed: 0, isPlayer, laps: 0, lastP: p, totalP: 0, name: isPlayer ? "Você" : "Bot "+i };
+                scene.add(car);
+                if(isPlayer) player = car; else cars.push(car);
+            }
         }
 
+        // ==========================================
+        // LOOP DE FÍSICA E ANIMAÇÃO
+        // ==========================================
         function update() {
             if(raceStatus !== 'racing') return;
             const dt = 1/60;
 
-            // FÍSICA E ACELERAÇÃO
-            if(keys['w']) player.userData.speedKmh += (player.userData.speedKmh < 150 ? 70 : 35) * dt;
-            else player.userData.speedKmh *= 0.99;
-            if(keys['s']) player.userData.speedKmh -= 120 * dt;
-            player.userData.speedKmh = Math.max(0, Math.min(340, player.userData.speedKmh));
+            // 1. ACELERAÇÃO
+            if(keys['w']) player.userData.speed += (player.userData.speed < 150 ? 75 : 40) * dt;
+            else player.userData.speed *= 0.992;
+            if(keys['s']) player.userData.speed -= 150 * dt;
+            player.userData.speed = Math.max(0, Math.min(345, player.userData.speed));
 
-            // --- DIREÇÃO REALISTA (Proporcional à Velocidade) ---
-            let speedFactor = player.userData.speedKmh / 180; // No auge em 180km/h
-            speedFactor = Math.min(speedFactor, 1.1); // Limita o giro máximo
-            
-            const steerAbility = 2.8 * speedFactor; // Multiplica a força do giro pela velocidade
+            // 2. DIREÇÃO PROPORCIONAL (Só vira se estiver andando)
+            let steerFactor = player.userData.speed / 180; 
+            steerFactor = Math.min(steerFactor, 1.1); 
+            const steerPower = 3.0 * steerFactor;
 
-            if(keys['a']) player.rotation.y += steerAbility * dt;
-            if(keys['d']) player.rotation.y -= steerAbility * dt;
+            if(keys['a']) player.rotation.y += steerPower * dt;
+            if(keys['d']) player.rotation.y -= steerPower * dt;
 
-            player.translateZ(player.userData.speedKmh / 3.6 * dt);
-            player.position.y = CAR_Y; 
+            // 3. MOVIMENTO
+            player.translateZ(player.userData.speed / 3.6 * dt);
+            player.position.y = CAR_HEIGHT;
 
-            // HUD E LOGICA
-            document.getElementById('speedTxt').innerText = Math.floor(player.userData.speedKmh);
-            document.getElementById('gearTxt').innerText = Math.ceil(player.userData.speedKmh / 45) || 1;
-            
-            checkProgress(player);
+            // 4. IA E REGRAS
+            checkLapProgress(player);
             cars.forEach(ai => {
                 const p = (ai.userData.lastP + 0.0006) % 1;
-                ai.position.set(trackCurve.getPointAt(p).x, CAR_Y, trackCurve.getPointAt(p).z);
-                ai.lookAt(trackCurve.getPointAt((p+0.001)%1).x, CAR_Y, trackCurve.getPointAt((p+0.001)%1).z);
+                const pos = trackCurve.getPointAt(p);
+                ai.position.set(pos.x, CAR_HEIGHT, pos.z);
+                ai.lookAt(trackCurve.getPointAt((p+0.001)%1).x, CAR_HEIGHT, trackCurve.getPointAt((p+0.001)%1).z);
                 ai.userData.lastP = p;
-                checkProgress(ai);
+                checkLapProgress(ai);
             });
+
+            // 5. HUD
+            document.getElementById('speedTxt').innerText = Math.floor(player.userData.speed);
+            document.getElementById('gearTxt').innerText = Math.ceil(player.userData.speed / 48) || 1;
             updateRanking();
         }
 
-        function checkProgress(car) {
+        function checkLapProgress(car) {
             let closestP = 0, minDist = Infinity;
             for(let i=0; i<=100; i+=2) {
                 const d = car.position.distanceTo(trackCurve.getPointAt(i/100));
@@ -184,13 +244,13 @@
             document.getElementById('posTxt').innerText = sorted.findIndex(c => c.userData.isPlayer) + 1;
         }
 
-        function startCountdown() {
+        function startRaceCountdown() {
             const c = document.getElementById('lights-container');
             c.style.display = 'block';
-            let lit = 0;
+            let l = 0;
             const t = setInterval(() => {
-                lit++;
-                if(lit <= 5) document.getElementById('L'+lit).classList.add('red');
+                l++;
+                if(l <= 5) document.getElementById('L'+l).classList.add('red');
                 else {
                     clearInterval(t);
                     setTimeout(() => {
