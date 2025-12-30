@@ -163,18 +163,23 @@
         }
 
         function handleCollisions() {
-            const all = [player, ...cars];
-            for(let i=0; i<all.length; i++) {
-                for(let j=i+1; j<all.length; j++) {
-                    const dist = all[i].position.distanceTo(all[j].position);
-                    if(dist < 5) {
-                        all[i].userData.speed *= 0.7;
-                        all[j].userData.speed *= 0.7;
-                        all[i].translateZ(-0.3);
-                    }
-                }
+    const all = [player, ...cars];
+    for(let i=0; i<all.length; i++) {
+        for(let j=i+1; j<all.length; j++) {
+            const dist = all[i].position.distanceTo(all[j].position);
+            
+            if(dist < 3.0) { 
+                // Se for o player, perde um pouco mais (0.85)
+                // Se for IA, perde quase nada (0.97) para não travar a pista
+                all[i].userData.speed *= all[i].userData.isPlayer ? 0.85 : 0.97;
+                all[j].userData.speed *= all[j].userData.isPlayer ? 0.85 : 0.97;
+                
+                // Reduzimos o empurrão para a IA não bugar fora da pista
+                if(all[i].userData.isPlayer) all[i].translateZ(-0.1);
             }
         }
+    }
+}
 
         function update() {
             if(raceStatus !== 'racing') return;
@@ -205,21 +210,50 @@
             player.translateZ(player.userData.speed * 2.5);
             player.position.y = CAR_Y;
 
-            // --- IA ---
-            cars.forEach(ai => {
-                if(ai.userData.finished) return;
-                if(ai.userData.speed < 1.05) ai.userData.speed += 0.004;
-                
-                const curA = Math.atan2(ai.position.z, ai.position.x);
-                const r = TRACK_RADIUS + ai.userData.lane;
-				const speedMultiplier = 2.5; 
-				const nextA = ai.userData.lastAngle + (ai.userData.speed / TRACK_RADIUS) * speedMultiplier;
-                
-				ai.userData.lastAngle = nextA;
-                ai.position.set(Math.cos(nextA)*r, CAR_Y, Math.sin(nextA)*r);
-                ai.lookAt(Math.cos(nextA+0.1)*r, CAR_Y, Math.sin(nextA+0.1)*r);
-                checkLap(ai);
-            });
+           // --- IA Lógica de Movimento e Ultrapassagem ---
+cars.forEach(ai => {
+    if(ai.userData.finished) return;
+
+    // 1. Aceleração da IA (Sincronizada com seu multiplicador de 2.5)
+    if(ai.userData.speed < 1.05) ai.userData.speed += 0.004;
+    
+    // 2. Lógica de "Radar" para Ultrapassagem
+    // A IA verifica se há alguém na frente dela na mesma faixa
+    const detectionRange = 15; // Distância de detecção
+    let carInFront = false;
+
+    [player, ...cars].forEach(other => {
+        if (other === ai) return;
+        
+        // Calcula a distância angular aproximada
+        const dist = Math.abs(ai.userData.lastAngle - other.userData.lastAngle);
+        // Se estiverem na mesma faixa e próximos
+        if (dist < 0.05 && ai.userData.lane === other.userData.lane) {
+            carInFront = true;
+        }
+    });
+
+    // 3. Tomada de Decisão: Mudar de faixa?
+    if (carInFront) {
+        // Tenta mudar para uma faixa aleatória (Esquerda ou Direita)
+        const targetLane = (Math.random() > 0.5) ? 6 : -6;
+        // Move suavemente para a nova faixa
+        ai.userData.lane = THREE.MathUtils.lerp(ai.userData.lane, targetLane, 0.05);
+    }
+
+    // 4. Movimento Angular (O multiplicador 2.5 que você aplicou)
+    const speedMultiplier = 2.5; 
+    const nextA = ai.userData.lastAngle + (ai.userData.speed / TRACK_RADIUS) * speedMultiplier;
+    
+    // Calcula a posição final baseada no raio + faixa atual
+    const r = TRACK_RADIUS + ai.userData.lane;
+    
+    ai.position.set(Math.cos(nextA) * r, CAR_Y, Math.sin(nextA) * r);
+    ai.lookAt(Math.cos(nextA + 0.1) * r, CAR_Y, Math.sin(nextA + 0.1) * r);
+    
+    ai.userData.lastAngle = nextA;
+    checkLap(ai);
+});
 
             handleCollisions();
             checkLap(player);
