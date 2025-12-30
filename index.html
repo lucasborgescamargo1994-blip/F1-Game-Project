@@ -169,12 +169,18 @@
             const dist = all[i].position.distanceTo(all[j].position);
             
             if(dist < 3.0) { 
-                // Se for o player, perde um pouco mais (0.85)
-                // Se for IA, perde quase nada (0.97) para não travar a pista
-                all[i].userData.speed *= all[i].userData.isPlayer ? 0.85 : 0.97;
-                all[j].userData.speed *= all[j].userData.isPlayer ? 0.85 : 0.97;
+                // Penalidades de velocidade (IA perde quase nada)
+                all[i].userData.speed *= all[i].userData.isPlayer ? 0.85 : 0.98;
+                all[j].userData.speed *= all[j].userData.isPlayer ? 0.85 : 0.98;
                 
-                // Reduzimos o empurrão para a IA não bugar fora da pista
+                // --- SISTEMA DE VINGANÇA ---
+                // Se o Player bater em um Bot (ou vice-versa)
+                if(all[i].userData.isPlayer || all[j].userData.isPlayer) {
+                    const bot = all[i].userData.isPlayer ? all[j] : all[i];
+                    bot.userData.revengeMode = true;
+                    bot.userData.revengeTimer = 300; // 5 segundos de fúria (60 frames * 5)
+                }
+
                 if(all[i].userData.isPlayer) all[i].translateZ(-0.1);
             }
         }
