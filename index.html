@@ -202,7 +202,7 @@
             if(keys['d']) player.userData.angle -= steerPower;
 
             player.rotation.y = player.userData.angle;
-            player.translateZ(player.userData.speed);
+            player.translateZ(player.userData.speed * 2.5);
             player.position.y = CAR_Y;
 
             // --- IA ---
@@ -211,9 +211,11 @@
                 if(ai.userData.speed < 1.05) ai.userData.speed += 0.004;
                 
                 const curA = Math.atan2(ai.position.z, ai.position.x);
-                const nextA = curA + (ai.userData.speed / TRACK_RADIUS);
                 const r = TRACK_RADIUS + ai.userData.lane;
+				const speedMultiplier = 2.5; 
+				const nextA = ai.userData.lastAngle + (ai.userData.speed / TRACK_RADIUS) * speedMultiplier;
                 
+				ai.userData.lastAngle = nextA;
                 ai.position.set(Math.cos(nextA)*r, CAR_Y, Math.sin(nextA)*r);
                 ai.lookAt(Math.cos(nextA+0.1)*r, CAR_Y, Math.sin(nextA+0.1)*r);
                 checkLap(ai);
